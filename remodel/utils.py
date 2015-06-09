@@ -20,12 +20,15 @@ def create_indexes():
 class Counter(object):
     lock = Lock()
 
-    def __init__(self, init=0):
+    def __init__(self, init=0, mod_value=None):
         self.n = init
+        self.mod_value = mod_value
 
     @synchronized(lock)
     def incr(self):
         self.n += 1
+        if self.mod_value is not None:
+            self.n %= self.mod_value
 
     @synchronized(lock)
     def decr(self):

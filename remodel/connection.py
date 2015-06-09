@@ -1,6 +1,8 @@
 
 import rethinkdb as r
 from contextlib import contextmanager
+from rethinkdb.errors import RqlDriverError
+
 try:
     from queue import Queue, Empty
 except ImportError:
@@ -39,29 +41,59 @@ class ConnectionPool(object):
         self.q = Queue()
         self.max_connections = max_connections
         self._created_connections = Counter()
+        self._next_connection_args_num = Counter(mod_value=1)
         self.connection_class = Connection
-        self.connection_kwargs = {}
+        self.connection_kwargs = [{}]
 
-    def configure(self, max_connections=5, **connection_kwargs):
+    def configure(self, max_connections=5, multi_connection_kwargs=None, **connection_kwargs):
         self.max_connections = max_connections
-        self.connection_kwargs = connection_kwargs
+        if multi_connection_kwargs:
+            self.connection_kwargs = multi_connection_kwargs
+            self._next_connection_args_num = Counter(mod_value=len(multi_connection_kwargs))
+        else:
+            self.connection_kwargs = [connection_kwargs]
 
     def get(self):
+        conn = None
+
         try:
-            return self.q.get_nowait()
+            # Iterate through Queue trying to return an open connection, leave loop when Queue is empty
+            while True:
+                try:
+                    conn = self.q.get_nowait()
+                    conn.check_open()
+                    return conn
+                except RqlDriverError:
+                    # Connection is not open
+                    del conn
+                    self._created_connections.decr()
         except Empty:
+            # Create connection if possible and return that
             if self._created_connections.current() < self.max_connections:
-                conn = self.connection_class(**self.connection_kwargs).conn
-                self._created_connections.incr()
-                return conn
+                # Attempt connections until we run out of hosts
+                for attempts in range(len(self.connection_kwargs)):
+                    conn = self.connection_class(**self._next_connection_args()).conn
+                    if not conn.is_open():
+                        continue
+                    self._created_connections.incr()
+                    return conn
+                raise RqlDriverError("Unable to connect")
             raise
 
     def put(self, connection):
         self.q.put(connection)
-        self._created_connections.decr()
 
     def created(self):
         return self._created_connections.current()
+
+    def _next_connection_args(self):
+        """
+        Get the next set of connection arguments
+        :return: Dictionary of connection arguments for passing into a Connection
+        """
+        next_args_num = self._next_connection_args_num.current()
+        self._next_connection_args_num.incr()
+        return self.connection_kwargs[next_args_num]
 
 
 pool = ConnectionPool()
