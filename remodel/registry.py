@@ -62,3 +62,35 @@ class IndexRegistry(object):
 
 
 index_registry = IndexRegistry()
+
+
+class TableRegistry(object):
+    def __init__(self):
+        self._data = {}
+
+    def __len__(self):
+        return len(self._data)
+
+    def register(self, table, name):
+        model_registry.get(name)  # Check that model name is registered
+        if table in self._data:
+            raise AlreadyRegisteredError('Table "%s" has been already registered' % table)
+        self._data[table] = name
+
+    def unregister(self, table):
+        if table not in self._data:
+            raise KeyError('"%s" is not a registered table name' % table)
+        del self._data[table]
+
+    def get(self, table):
+        if table not in self._data:
+            raise KeyError('Table "%s" has not been registered' % table)
+        return self._data[table]
+
+    def all(self):
+        return self._data
+
+    def clear(self):
+        self._data = {}
+
+table_registry = TableRegistry()

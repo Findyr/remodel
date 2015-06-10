@@ -7,6 +7,7 @@ from .errors import OperationError
 from .field_handler import FieldHandlerBase, FieldHandler
 from .object_handler import ObjectHandler
 from .registry import model_registry
+from remodel.registry import table_registry
 from .utils import deprecation_warning
 
 
@@ -24,7 +25,8 @@ class ModelBase(type):
             return super_new(mcs, name, bases, dct)
 
         # Set metadata
-        dct['_table'] = tableize(name)
+        table_name = tableize(name)
+        dct['_table'] = table_name
 
         rel_attrs = {rel: dct.setdefault(rel, ()) for rel in REL_TYPES}
         dct['_field_handler_cls'] = FieldHandlerBase(
@@ -46,6 +48,7 @@ class ModelBase(type):
 
         new_class = super_new(mcs, name, bases, dct)
         model_registry.register(name, new_class)
+        table_registry.register(table_name, name)
         setattr(new_class, 'objects', object_handler_cls(new_class))
         return new_class
 
