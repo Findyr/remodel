@@ -86,3 +86,6 @@ class FieldHandler(object):
     def as_dict(self):
         return {field: self.__dict__[field] for field in self.__dict__
                 if not field.startswith('_')}
+
+    def update_dict(self, updated_fields):
+        self.__dict__.update(updated_fields)
