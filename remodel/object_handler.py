@@ -77,8 +77,23 @@ class ObjectSet(object):
         return len(self.result_cache)
 
     def __getitem__(self, key):
-        self._fetch_results()
-        return self.result_cache[key]
+        object_set = self
+        try:  # Try treating it like a slice, first
+            start = key.start
+            stop = key.stop
+            if start is not None and stop is not None:
+                object_set = ObjectSet(self.object_handler, self.query.slice(start, stop))
+            elif start is not None:
+                object_set = ObjectSet(self.object_handler, self.query.slice(start))
+            elif stop is not None:
+                object_set = ObjectSet(self.object_handler, self.query.limit(stop))
+            return object_set  # Return a filtered set, since we've just sliced the query
+        except AttributeError:  # Must not be a slice!
+            # It's an integer (or so we assume), so just get that single item
+            return ObjectSet(self.object_handler, self.query.nth(key)).iterator().next()
+
+    def count(self):
+        return self.query.count().run()
 
     def iterator(self):
         results = self.query.run()
