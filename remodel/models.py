@@ -2,12 +2,15 @@ import rethinkdb as r
 from six import add_metaclass
 from inflection import tableize
 
+from django.conf import settings
 from .decorators import callback, classaccessonlyproperty, dispatch_to_metaclass
 from .errors import OperationError
 from .field_handler import FieldHandlerBase, FieldHandler
 from .object_handler import ObjectHandler
 from .registry import model_registry
 from .utils import deprecation_warning
+
+from findyr.search import elastic_search
 
 
 REL_TYPES = ('has_one', 'has_many', 'belongs_to', 'has_and_belongs_to_many')
@@ -66,7 +69,7 @@ class Model(object):
 
         self._run_callbacks('after_init')
 
-    def save(self):
+    def save(self, updated=False):
         self._run_callbacks('before_save')
 
         fields_dict = self.fields.as_dict()
@@ -88,7 +91,13 @@ class Model(object):
         # Force overwrite so that related caches are flushed
         self.fields.__dict__ = result['changes'][0]['new_val']
 
-        self._run_callbacks('after_save')
+        self._run_callbacks('after_save', updated)
+
+    def after_save(self, updated=False):
+
+        if updated:
+            elastic_search.update(index=settings.ELASTIC_INDEX_PREFIX + "archive",
+                                        doc_type="products", id=self.fields.as_dict()['id'], script=self.fields.as_dict())           
 
     def update(self, **kwargs):
         for key, value in kwargs.items():
