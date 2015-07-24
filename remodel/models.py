@@ -69,7 +69,7 @@ class Model(object):
 
         self._run_callbacks('after_init')
 
-    def save(self, updated=False):
+    def save(self):
         self._run_callbacks('before_save')
 
         fields_dict = self.fields.as_dict()
@@ -91,13 +91,7 @@ class Model(object):
         # Force overwrite so that related caches are flushed
         self.fields.__dict__ = result['changes'][0]['new_val']
 
-        self._run_callbacks('after_save', updated)
-
-    def after_save(self, updated=False):
-
-        if updated:
-            elastic_search.update(index=settings.ELASTIC_INDEX_PREFIX + "archive",
-                                        doc_type="products", id=self.fields.as_dict()['id'], script=self.fields.as_dict())           
+        self._run_callbacks('after_save', result['changes'])
 
     def update(self, **kwargs):
         for key, value in kwargs.items():
@@ -165,9 +159,19 @@ class Model(object):
     def __str__(self):
         return '<%s object>' % self.__class__.__name__
 
-    def _run_callbacks(self, name):
+    def _run_callbacks(self, name, result=None):
         for callback in self._callbacks[name]:
             getattr(self, callback)()
+
+            #If changes came back from the rethink update
+            if result:
+                for update_doc in result:
+                    try:
+                        elastic_search.index(index=settings.ELASTIC_INDEX_PREFIX + "archive",
+                            doc_type="products", id=update_doc['new_val']['id'], doc=update_doc['new_val'])  
+                    except Exception as err:
+                        raise Exception(err)
+
 
     @classaccessonlyproperty
     def table(self):
