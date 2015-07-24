@@ -1,3 +1,5 @@
+import logging
+
 import rethinkdb as r
 from six import add_metaclass
 from inflection import tableize
@@ -15,6 +17,8 @@ from findyr.search import elastic_search
 
 REL_TYPES = ('has_one', 'has_many', 'belongs_to', 'has_and_belongs_to_many')
 CALLBACKS = ('before_save', 'after_save', 'before_delete', 'after_delete', 'after_init')
+
+logger = logging.getLogger(__name__)
 
 
 class ModelBase(type):
@@ -170,8 +174,7 @@ class Model(object):
                         elastic_search.index(index=settings.ELASTIC_INDEX_PREFIX + "archive",
                             doc_type="products", id=update_doc['new_val']['id'], doc=update_doc['new_val'])  
                     except Exception as err:
-                        raise Exception(err)
-
+                        logger.error("Error adding updated ReThink document to ElasticSearch Index: {0}".format(err))
 
     @classaccessonlyproperty
     def table(self):
