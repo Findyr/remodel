@@ -98,7 +98,7 @@ class Model(object):
         # Force overwrite so that related caches are flushed
         self.fields.__dict__ = result['changes'][0]['new_val']
 
-        self._run_callbacks('after_save', result['changes'])
+        self._run_callbacks('after_save', updated=True)
 
     def update(self, **kwargs):
         for key, value in kwargs.items():
@@ -126,6 +126,7 @@ class Model(object):
             delattr(self.fields, field)
 
         self._run_callbacks('after_delete')
+
 
     # TODO: Get rid of this nasty decorator after renaming .get() on ObjectHandler
     @dispatch_to_metaclass
@@ -166,18 +167,13 @@ class Model(object):
     def __str__(self):
         return '<%s object>' % self.__class__.__name__
 
-    def _run_callbacks(self, name, result=None):
+    def _run_callbacks(self, name, **kwargs):
         for callback in self._callbacks[name]:
-            getattr(self, callback)()
-
-            #If changes came back from the rethink update
-            if result:
-                for update_doc in result:
-                    try:
-                        elastic_search.index(index=settings.ELASTIC_INDEX_PREFIX + "archive",
-                            doc_type="products", id=update_doc['new_val']['id'], doc=update_doc['new_val'])  
-                    except Exception as err:
-                        logger.error("Error adding updated ReThink document to ElasticSearch Index: {0}".format(err))
+            try:
+                getattr(self, callback)(**kwargs)
+            except TypeError as err:
+                raise Exception(err)
+                getattr(self, callback)()
 
     @classaccessonlyproperty
     def table(self):
