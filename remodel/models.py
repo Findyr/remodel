@@ -1,10 +1,7 @@
-import logging
-
 import rethinkdb as r
 from six import add_metaclass
 from inflection import tableize
 
-from django.conf import settings
 from .decorators import callback, classaccessonlyproperty, dispatch_to_metaclass
 from .errors import OperationError
 from .field_handler import FieldHandlerBase, FieldHandler
@@ -13,13 +10,8 @@ from .registry import model_registry
 from remodel.registry import table_registry
 from .utils import deprecation_warning
 
-from findyr.search import elastic_search
-
-
 REL_TYPES = ('has_one', 'has_many', 'belongs_to', 'has_and_belongs_to_many')
 CALLBACKS = ('before_save', 'after_save', 'before_delete', 'after_delete', 'after_init')
-
-logger = logging.getLogger(__name__)
 
 
 class ModelBase(type):
@@ -84,8 +76,8 @@ class Model(object):
             # Attempt update
             id_ = fields_dict['id']
             result = (r.table(self._table).get(id_).replace(r.row
-                        .without(r.row.keys().difference(list(fields_dict.keys())))
-                        .merge(fields_dict), return_changes='always').run())
+                                                            .without(r.row.keys().difference(list(fields_dict.keys())))
+                                                            .merge(fields_dict), return_changes='always').run())
 
         except KeyError:
             # Resort to insert
@@ -126,7 +118,6 @@ class Model(object):
             delattr(self.fields, field)
 
         self._run_callbacks('after_delete')
-
 
     # TODO: Get rid of this nasty decorator after renaming .get() on ObjectHandler
     @dispatch_to_metaclass
@@ -171,8 +162,7 @@ class Model(object):
         for callback in self._callbacks[name]:
             try:
                 getattr(self, callback)(**kwargs)
-            except TypeError as err:
-                raise Exception(err)
+            except TypeError:
                 getattr(self, callback)()
 
     @classaccessonlyproperty
