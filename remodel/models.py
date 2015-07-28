@@ -1,7 +1,10 @@
+import logging
+
 import rethinkdb as r
 from six import add_metaclass
 from inflection import tableize
 
+from django.conf import settings
 from .decorators import callback, classaccessonlyproperty, dispatch_to_metaclass
 from .errors import OperationError
 from .field_handler import FieldHandlerBase, FieldHandler
@@ -10,9 +13,13 @@ from .registry import model_registry
 from remodel.registry import table_registry
 from .utils import deprecation_warning
 
+from findyr.search import elastic_search
+
 
 REL_TYPES = ('has_one', 'has_many', 'belongs_to', 'has_and_belongs_to_many')
 CALLBACKS = ('before_save', 'after_save', 'before_delete', 'after_delete', 'after_init')
+
+logger = logging.getLogger(__name__)
 
 
 class ModelBase(type):
@@ -91,7 +98,7 @@ class Model(object):
         # Force overwrite so that related caches are flushed
         self.fields.__dict__ = result['changes'][0]['new_val']
 
-        self._run_callbacks('after_save')
+        self._run_callbacks('after_save', result['changes'])
 
     def update(self, **kwargs):
         for key, value in kwargs.items():
@@ -159,9 +166,18 @@ class Model(object):
     def __str__(self):
         return '<%s object>' % self.__class__.__name__
 
-    def _run_callbacks(self, name):
+    def _run_callbacks(self, name, result=None):
         for callback in self._callbacks[name]:
             getattr(self, callback)()
+
+            #If changes came back from the rethink update
+            if result:
+                for update_doc in result:
+                    try:
+                        elastic_search.index(index=settings.ELASTIC_INDEX_PREFIX + "archive",
+                            doc_type="products", id=update_doc['new_val']['id'], doc=update_doc['new_val'])  
+                    except Exception as err:
+                        logger.error("Error adding updated ReThink document to ElasticSearch Index: {0}".format(err))
 
     @classaccessonlyproperty
     def table(self):
